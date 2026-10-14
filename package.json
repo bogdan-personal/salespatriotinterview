@@ -1,0 +1,13 @@
+{
+  "name": "dibbs-rfq-browser",
+  "version": "1.0.0",
+  "description": "Pulls the daily DIBBS RFQ list into Postgres and lets a vendor browse, search and filter it",
+  "scripts": {
+    "db": "bash db.sh",
+    "pull": "node pull.js",
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "pg": "^8.23.1"
+  }
+}

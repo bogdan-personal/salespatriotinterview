@@ -1,0 +1,362 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>DIBBS RFQ Browser</title>
+<style>
+  :root {
+    --bg: #f4f6f8; --card: #ffffff; --line: #dde3ea; --text: #1b2330; --muted: #5f6b7a;
+    --accent: #1f5fbf; --accent-soft: #e6eefb; --danger: #c0392b; --warn: #b7791f; --ok: #2d7d46;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; font: 14px/1.4 -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; background: var(--bg); color: var(--text); }
+  header { background: var(--card); border-bottom: 1px solid var(--line); padding: 14px 20px; display: flex; align-items: baseline; gap: 16px; flex-wrap: wrap; }
+  header h1 { margin: 0; font-size: 18px; }
+  header .sub { color: var(--muted); font-size: 13px; }
+  main { padding: 16px 20px; max-width: 1500px; margin: 0 auto; }
+
+  .filters { background: var(--card); border: 1px solid var(--line); border-radius: 8px; padding: 12px 14px; display: flex; flex-wrap: wrap; gap: 10px 14px; align-items: flex-end; }
+  .filters label { display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: var(--muted); }
+  .filters input, .filters select { font: inherit; padding: 6px 8px; border: 1px solid var(--line); border-radius: 6px; background: #fff; color: var(--text); }
+  .filters input:focus, .filters select:focus { outline: 2px solid var(--accent-soft); border-color: var(--accent); }
+  #q { width: 300px; }
+  .small { width: 90px; }
+  .checks { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; min-height: 32px; }
+  .checks span { display: inline-flex; align-items: center; gap: 4px; padding: 4px 8px; border: 1px solid var(--line); border-radius: 999px; cursor: pointer; font-size: 12px; color: var(--text); background: #fff; user-select: none; }
+  .checks span.on { background: var(--accent-soft); border-color: var(--accent); color: var(--accent); }
+  .checks input { display: none; }
+  button { font: inherit; padding: 7px 12px; border: 1px solid var(--line); border-radius: 6px; background: #fff; cursor: pointer; color: var(--text); }
+  button:hover { border-color: var(--accent); color: var(--accent); }
+
+  .bar { display: flex; justify-content: space-between; align-items: center; margin: 12px 2px 8px; color: var(--muted); font-size: 13px; flex-wrap: wrap; gap: 8px; }
+  .bar b { color: var(--text); }
+  .pager { display: flex; gap: 6px; align-items: center; }
+
+  .tablewrap { background: var(--card); border: 1px solid var(--line); border-radius: 8px; overflow: auto; }
+  table { border-collapse: collapse; width: 100%; min-width: 1000px; }
+  th, td { padding: 8px 10px; text-align: left; border-bottom: 1px solid var(--line); vertical-align: top; white-space: nowrap; }
+  th { position: sticky; top: 0; background: #fafbfc; font-size: 12px; color: var(--muted); font-weight: 600; z-index: 1; }
+  tr:hover td { background: #f8fafd; }
+  td.num { text-align: right; font-variant-numeric: tabular-nums; }
+  a { color: var(--accent); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 13px; }
+  .muted { color: var(--muted); font-size: 12px; }
+  .badge { display: inline-block; padding: 2px 7px; border-radius: 999px; font-size: 11px; font-weight: 600; background: #eef1f5; color: #3b4654; }
+  .badge.N { background: #eef1f5; }
+  .badge.Y { background: #e3f3e8; color: var(--ok); }
+  .badge.H, .badge.R, .badge.L, .badge.A, .badge.E { background: #fff3dc; color: var(--warn); }
+  .soon { color: var(--danger); font-weight: 600; }
+  .warn { color: var(--warn); font-weight: 600; }
+  .links a { margin-right: 8px; font-size: 12px; }
+  .empty { padding: 40px; text-align: center; color: var(--muted); }
+</style>
+</head>
+<body>
+<header>
+  <h1>DIBBS RFQ Browser</h1>
+  <span class="sub" id="summary">loading…</span>
+</header>
+
+<main>
+  <div class="filters">
+    <label>Search (solicitation, NSN, part number, PR, nomenclature)
+      <input id="q" type="search" placeholder="e.g. 5306 bolt, SPE1C1-26-Q-0524, 8345-00-292-9415">
+    </label>
+
+    <label>Set-aside <span class="checks" id="setaside"></span></label>
+
+    <label>FSC codes
+      <input id="fsc" list="fsclist" placeholder="5306, 5310" style="width:130px">
+      <datalist id="fsclist"></datalist>
+    </label>
+
+    <label>Status
+      <select id="status">
+        <option value="open">Open (quote still allowed)</option>
+        <option value="closed">Closed</option>
+        <option value="all">All</option>
+      </select>
+    </label>
+
+    <label>Closing within
+      <select id="closing_days">
+        <option value="">any time</option>
+        <option value="2">2 days</option>
+        <option value="5">5 days</option>
+        <option value="10">10 days</option>
+        <option value="20">20 days</option>
+      </select>
+    </label>
+
+    <label>Posted on
+      <select id="posted"><option value="">any day</option></select>
+    </label>
+
+    <label>Qty min <input id="min_qty" class="small" type="number" min="0" placeholder="0"></label>
+    <label>Qty max <input id="max_qty" class="small" type="number" min="0" placeholder="∞"></label>
+
+    <label>Type
+      <select id="sol_type"><option value="">any</option></select>
+    </label>
+
+    <label>AMSC
+      <select id="amsc"><option value="">any</option></select>
+    </label>
+
+    <label>Item
+      <select id="item_type">
+        <option value="">any</option>
+        <option value="1">NSN</option>
+        <option value="2">Part number</option>
+      </select>
+    </label>
+
+    <label>Sort by
+      <select id="sort">
+        <option value="return_by">Deadline (soonest first)</option>
+        <option value="posted">Posted (newest first)</option>
+        <option value="qty_desc">Quantity (largest first)</option>
+        <option value="qty_asc">Quantity (smallest first)</option>
+        <option value="nomenclature">Nomenclature</option>
+        <option value="solicitation">Solicitation</option>
+        <option value="nsn">NSN</option>
+      </select>
+    </label>
+
+    <button id="reset" type="button">Reset</button>
+  </div>
+
+  <div class="bar">
+    <div id="count"></div>
+    <div class="pager">
+      <button id="prev" type="button">‹ Prev</button>
+      <span id="pageinfo"></span>
+      <button id="next" type="button">Next ›</button>
+    </div>
+  </div>
+
+  <div class="tablewrap">
+    <table>
+      <thead>
+        <tr>
+          <th>Solicitation</th>
+          <th>NSN / Part</th>
+          <th>Nomenclature</th>
+          <th style="text-align:right">Qty</th>
+          <th>Set-aside</th>
+          <th>Posted</th>
+          <th>Return by</th>
+          <th>Type</th>
+          <th>AMSC</th>
+          <th>Buyer</th>
+          <th>Links</th>
+        </tr>
+      </thead>
+      <tbody id="rows"></tbody>
+    </table>
+    <div id="empty" class="empty" style="display:none">No RFQs match these filters.</div>
+  </div>
+</main>
+
+<script>
+// ---------------------------------------------------------------------------
+// names for the one-letter codes DIBBS uses
+// ---------------------------------------------------------------------------
+var SET_ASIDE_NAMES = {
+  N: "Unrestricted", Y: "Small Business", H: "HUBZone", R: "SDVOSB",
+  L: "Woman Owned (WOSB)", A: "8(a)", E: "EDWOSB"
+};
+var SOL_TYPE_NAMES = { Q: "Q - RFQ", T: "T - RFQ (automated)", U: "U - RFQ" };
+
+var page = 1;
+var typingTimer = null;
+
+function $(id) { return document.getElementById(id); }
+
+function escapeHtml(s) {
+  return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+}
+
+// 8345002929415 -> 8345-00-292-9415 ; part numbers are shown as they are
+function formatNsn(nsn, itemType) {
+  if (itemType === "1" && nsn.length === 13) {
+    return nsn.slice(0, 4) + "-" + nsn.slice(4, 6) + "-" + nsn.slice(6, 9) + "-" + nsn.slice(9);
+  }
+  return nsn;
+}
+
+// SPE1C126Q0524 -> SPE1C1-26-Q-0524 (how DIBBS prints it)
+function formatSolicitation(s) {
+  if (s.length === 13) return s.slice(0, 6) + "-" + s.slice(6, 8) + "-" + s.slice(8, 9) + "-" + s.slice(9);
+  return s;
+}
+
+// links back to DIBBS
+function packageViewUrl(sol) { return "https://www.dibbs.bsm.dla.mil/rfq/rfqrec.aspx?sn=" + sol; }
+function pdfUrl(sol, fileName) { return "https://dibbs2.bsm.dla.mil/Downloads/RFQ/" + sol.slice(-1) + "/" + fileName.replace(/\.pdf$/i, ".PDF"); }
+function nsnViewUrl(nsn) { return "https://www.dibbs.bsm.dla.mil/RFQ/RFQNsn.aspx?value=" + nsn + "&category=post&Scope="; }
+function quoteUrl(sol) { return "https://www.dibbs.bsm.dla.mil/RA/Quote/QuoteFrm.aspx?sn=" + sol; }
+
+// ---------------------------------------------------------------------------
+// read the filter controls -> query string
+// ---------------------------------------------------------------------------
+function selectedSetAsides() {
+  var codes = [];
+  var boxes = document.querySelectorAll("#setaside input:checked");
+  for (var i = 0; i < boxes.length; i++) codes.push(boxes[i].value);
+  return codes.join(",");
+}
+
+function buildQuery() {
+  var p = new URLSearchParams();
+  p.set("q", $("q").value);
+  p.set("set_aside", selectedSetAsides());
+  p.set("fsc", $("fsc").value);
+  p.set("status", $("status").value);
+  p.set("closing_days", $("closing_days").value);
+  p.set("posted", $("posted").value);
+  p.set("min_qty", $("min_qty").value);
+  p.set("max_qty", $("max_qty").value);
+  p.set("sol_type", $("sol_type").value);
+  p.set("amsc", $("amsc").value);
+  p.set("item_type", $("item_type").value);
+  p.set("sort", $("sort").value);
+  p.set("page", page);
+  return p.toString();
+}
+
+// ---------------------------------------------------------------------------
+// load rows and draw the table
+// ---------------------------------------------------------------------------
+function load() {
+  fetch("/api/rfqs?" + buildQuery())
+    .then(function (r) { return r.json(); })
+    .then(function (data) {
+      var html = "";
+      for (var i = 0; i < data.rows.length; i++) html += rowHtml(data.rows[i]);
+      $("rows").innerHTML = html;
+      $("empty").style.display = data.rows.length ? "none" : "block";
+
+      var pages = Math.max(1, Math.ceil(data.total / data.page_size));
+      $("count").innerHTML = "<b>" + data.total.toLocaleString() + "</b> RFQs match";
+      $("pageinfo").textContent = "page " + data.page + " of " + pages;
+      $("prev").disabled = data.page <= 1;
+      $("next").disabled = data.page >= pages;
+    });
+}
+
+function rowHtml(r) {
+  var days = r.days_left;
+  var daysText, daysClass = "";
+  if (days < 0) { daysText = "closed"; daysClass = "muted"; }
+  else if (days === 0) { daysText = "today"; daysClass = "soon"; }
+  else if (days <= 3) { daysText = "in " + days + " d"; daysClass = "soon"; }
+  else if (days <= 7) { daysText = "in " + days + " d"; daysClass = "warn"; }
+  else { daysText = "in " + days + " d"; daysClass = "muted"; }
+
+  var setAsideName = SET_ASIDE_NAMES[r.set_aside] || r.set_aside;
+
+  return "<tr>" +
+    "<td><a class='mono' href='" + packageViewUrl(r.solicitation) + "' target='_blank' title='Open this RFQ on DIBBS'>" +
+      formatSolicitation(r.solicitation) + "</a><br><span class='muted'>PR " + escapeHtml(r.pr) + "</span></td>" +
+    "<td><a class='mono' href='" + nsnViewUrl(r.nsn) + "' target='_blank' title='All RFQs for this NSN on DIBBS'>" +
+      escapeHtml(formatNsn(r.nsn, r.item_type)) + "</a><br><span class='muted'>FSC " + escapeHtml(r.fsc) + "</span></td>" +
+    "<td>" + escapeHtml(r.nomenclature) + "</td>" +
+    "<td class='num'>" + r.qty.toLocaleString() + " <span class='muted'>" + escapeHtml(r.unit) + "</span></td>" +
+    "<td><span class='badge " + escapeHtml(r.set_aside) + "'>" + escapeHtml(setAsideName) + "</span></td>" +
+    "<td>" + r.posted_date + "</td>" +
+    "<td>" + r.return_by + "<br><span class='" + daysClass + "'>" + daysText + "</span></td>" +
+    "<td title='" + escapeHtml(SOL_TYPE_NAMES[r.sol_type] || "") + "'>" + escapeHtml(r.sol_type) + "</td>" +
+    "<td>" + escapeHtml(r.amsc) + "</td>" +
+    "<td class='mono'>" + escapeHtml(r.buyer_code) + "</td>" +
+    "<td class='links'>" +
+      "<a href='" + pdfUrl(r.solicitation, r.file_name) + "' target='_blank'>PDF</a>" +
+      "<a href='" + quoteUrl(r.solicitation) + "' target='_blank'>Quote</a>" +
+    "</td>" +
+  "</tr>";
+}
+
+// ---------------------------------------------------------------------------
+// fill the dropdowns from the data
+// ---------------------------------------------------------------------------
+function loadFilters() {
+  fetch("/api/filters")
+    .then(function (r) { return r.json(); })
+    .then(function (f) {
+      $("summary").textContent = f.totals.open.toLocaleString() + " open RFQs of " + f.totals.total.toLocaleString() +
+        " pulled · newest day " + (f.totals.newest_day || "-") + " · last pull " + (f.last_pull || "never");
+
+      var html = "";
+      for (var i = 0; i < f.set_asides.length; i++) {
+        var s = f.set_asides[i];
+        html += "<span><input type='checkbox' value='" + s.set_aside + "'>" +
+          escapeHtml(SET_ASIDE_NAMES[s.set_aside] || s.set_aside) + " <small>(" + s.n + ")</small></span>";
+      }
+      $("setaside").innerHTML = html;
+
+      html = "";
+      for (i = 0; i < f.fscs.length; i++) html += "<option value='" + f.fscs[i].fsc + "'>" + f.fscs[i].n + " open</option>";
+      $("fsclist").innerHTML = html;
+
+      html = "<option value=''>any day</option>";
+      for (i = 0; i < f.days.length; i++) html += "<option value='" + f.days[i].d + "'>" + f.days[i].d + " (" + f.days[i].n + ")</option>";
+      $("posted").innerHTML = html;
+
+      html = "<option value=''>any</option>";
+      for (i = 0; i < f.sol_types.length; i++) {
+        var t = f.sol_types[i].sol_type;
+        html += "<option value='" + t + "'>" + escapeHtml(SOL_TYPE_NAMES[t] || t) + " (" + f.sol_types[i].n + ")</option>";
+      }
+      $("sol_type").innerHTML = html;
+
+      html = "<option value=''>any</option>";
+      for (i = 0; i < f.amscs.length; i++) html += "<option value='" + f.amscs[i].amsc + "'>" + f.amscs[i].amsc + " (" + f.amscs[i].n + ")</option>";
+      $("amsc").innerHTML = html;
+    });
+}
+
+// ---------------------------------------------------------------------------
+// wire up events
+// ---------------------------------------------------------------------------
+function changed() { page = 1; load(); }
+
+$("q").addEventListener("input", function () {
+  clearTimeout(typingTimer);
+  typingTimer = setTimeout(changed, 250); // wait until the user stops typing
+});
+$("fsc").addEventListener("input", function () { clearTimeout(typingTimer); typingTimer = setTimeout(changed, 250); });
+$("min_qty").addEventListener("input", function () { clearTimeout(typingTimer); typingTimer = setTimeout(changed, 250); });
+$("max_qty").addEventListener("input", function () { clearTimeout(typingTimer); typingTimer = setTimeout(changed, 250); });
+
+var selects = ["status", "closing_days", "posted", "sol_type", "amsc", "item_type", "sort"];
+for (var i = 0; i < selects.length; i++) $(selects[i]).addEventListener("change", changed);
+
+// set-aside pills: clicking toggles the hidden checkbox inside
+$("setaside").addEventListener("click", function (e) {
+  var pill = e.target.closest("span");
+  if (!pill || !pill.querySelector("input")) return;
+  var box = pill.querySelector("input");
+  box.checked = !box.checked;
+  pill.classList.toggle("on", box.checked);
+  changed();
+});
+
+$("prev").addEventListener("click", function () { page--; load(); window.scrollTo(0, 0); });
+$("next").addEventListener("click", function () { page++; load(); window.scrollTo(0, 0); });
+
+$("reset").addEventListener("click", function () {
+  $("q").value = ""; $("fsc").value = ""; $("status").value = "open"; $("closing_days").value = "";
+  $("posted").value = ""; $("min_qty").value = ""; $("max_qty").value = ""; $("sol_type").value = "";
+  $("amsc").value = ""; $("item_type").value = ""; $("sort").value = "return_by";
+  var pills = document.querySelectorAll("#setaside span");
+  for (var i = 0; i < pills.length; i++) { pills[i].classList.remove("on"); pills[i].querySelector("input").checked = false; }
+  changed();
+});
+
+loadFilters();
+load();
+</script>
+</body>
+</html>
